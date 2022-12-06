@@ -173,6 +173,7 @@ void flipImageVertically(unsigned char* image, int width, int height, int channe
 
 int main(int argc, char* argv[])
 {
+    cout << "Mac modification..." << endl;
     if (!UInitialize(argc, argv, &gWindow))
         return EXIT_FAILURE;
 

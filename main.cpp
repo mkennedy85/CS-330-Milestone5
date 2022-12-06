@@ -32,7 +32,7 @@ namespace
     struct GLMesh
     {
         GLuint vao[5];         // Handle for the vertex array object
-        GLuint vbos[5];     // Handles for the vertex buffer objects
+        GLuint vbo[5];     // Handles for the vertex buffer objects
         GLuint nIndices[5];    // Number of indices of the mesh
     };
 
@@ -48,10 +48,11 @@ namespace
     GLuint gProgramId;
     GLuint lampProgramId;
 
-    // Camera
-    glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 3.0f);
-    glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
-    glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
+    // camera
+    Camera gCamera(glm::vec3(0.0f, 0.0f, 3.0f));
+    float gLastX = WINDOW_WIDTH / 2.0f;
+    float gLastY = WINDOW_HEIGHT / 2.0f;
+    bool gFirstMouse = true;
 
     // Variables used to change attributes of camera
     bool firstMouse = true;
@@ -69,7 +70,6 @@ namespace
     glm::vec3 gCubeScale(2.0f);
 
     // Cube and light color
-    //m::vec3 gObjectColor(0.6f, 0.5f, 0.75f);
     glm::vec3 gObjectColor(1.f, 0.2f, 0.0f);
     glm::vec3 gLightColor(1.0f, 1.0f, 1.0f);
 
@@ -152,7 +152,7 @@ const GLchar * objectFragmentShaderSource = GLSL(440,
         /*Phong lighting model calculations to generate ambient, diffuse, and specular components*/
 
         //Calculate Ambient lighting*/
-        float ambientStrength = 1.0f; // Set ambient or global lighting strength
+        float ambientStrength = 0.2f; // Set ambient or global lighting strength
         vec3 ambient = ambientStrength * lightColor; // Generate ambient light color
 
         //Calculate Diffuse lighting*/
@@ -369,27 +369,19 @@ bool UInitialize(int argc, char* argv[], GLFWwindow** window)
 // process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
 void UProcessInput(GLFWwindow* window)
 {
+    static const float cameraSpeed = 2.5f;
+
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
 
-    float cameraSpeed = static_cast<float>(2.5 * gDeltaTime) * (sensitivity * 100);
-
-    // Capturing key presses to update the position of the camera
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-        cameraPos += cameraSpeed * cameraFront;
+        gCamera.ProcessKeyboard(FORWARD, gDeltaTime);
     if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-        cameraPos -= cameraSpeed * cameraFront;
+        gCamera.ProcessKeyboard(BACKWARD, gDeltaTime);
     if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-        cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+        gCamera.ProcessKeyboard(LEFT, gDeltaTime);
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-        cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
-    if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
-        cameraPos += cameraSpeed * cameraUp;
-    if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
-        cameraPos -= cameraSpeed * cameraUp;
-    if (glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS)
-        perspective = !perspective;
-
+        gCamera.ProcessKeyboard(RIGHT, gDeltaTime);
 }
 
 
@@ -403,37 +395,20 @@ void UResizeWindow(GLFWwindow* window, int width, int height)
 // -------------------------------------------------------
 void UMousePositionCallback(GLFWwindow* window, double xpos, double ypos)
 {
-    if (firstMouse)
+    if (gFirstMouse)
     {
-        lastX = xpos;
-        lastY = ypos;
-        firstMouse = false;
+        gLastX = xpos;
+        gLastY = ypos;
+        gFirstMouse = false;
     }
 
-    float xoffset = xpos - lastX;
-    float yoffset = lastY - ypos;
-    lastX = xpos;
-    lastY = ypos;
+    float xoffset = xpos - gLastX;
+    float yoffset = gLastY - ypos; // reversed since y-coordinates go from bottom to top
 
-    // Update camera position based on speed
-    xoffset *= sensitivity;
-    yoffset *= sensitivity;
+    gLastX = xpos;
+    gLastY = ypos;
 
-    yaw += xoffset;
-    pitch += yoffset;
-
-    // Controlling pitch disallowing the camera from flipping
-    if (pitch > 89.0f)
-        pitch = 89.0f;
-    if (pitch < -89.0f)
-        pitch = -89.0f;
-
-    // Capturing the direction the camera is facing
-    glm::vec3 direction;
-    direction.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
-    direction.y = sin(glm::radians(pitch));
-    direction.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
-    cameraFront = glm::normalize(direction);
+    gCamera.ProcessMouseMovement(xoffset, yoffset);
 }
 
 
@@ -498,6 +473,7 @@ void URender()
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+    glm::mat4 projection;
     if (perspective) {
         // Creates a perspective projection
         projection = glm::perspective(glm::radians(45.0f), (GLfloat)WINDOW_WIDTH / (GLfloat)WINDOW_HEIGHT, 0.1f, 100.0f);
@@ -509,7 +485,7 @@ void URender()
     }
 
     // camera/view transformation
-    glm::mat4 view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+    glm::mat4 view = gCamera.GetViewMatrix();
 
     // Set the shader to be used
     glUseProgram(gProgramId);
@@ -556,7 +532,7 @@ void URender()
     glBindTexture(GL_TEXTURE_2D, textureTableId);
 
     // Draws the triangles
-    glDrawArrays(GL_TRIANGLES, 0, gMesh.nVertices[0]);
+    glDrawArrays(GL_TRIANGLES, 0, gMesh.nIndices[0]);
 
 #pragma endregion
 
@@ -626,6 +602,7 @@ void UCreateMesh(GLMesh& mesh)
     const GLuint floatsPerVertex = 3;
     const GLuint floatsPerNormal = 3;
     const GLuint floatsPerTexture = 2;
+    GLint stride = sizeof(float) * (floatsPerVertex + floatsPerNormal + floatsPerTexture);
 
     mesh.nIndices[0] = sizeof(tableVerts) / sizeof(tableVerts[0]) * (floatsPerVertex + floatsPerNormal + floatsPerTexture);
 
@@ -642,7 +619,7 @@ void UCreateMesh(GLMesh& mesh)
 	glEnableVertexAttribArray(0);
 	glVertexAttribPointer(1, floatsPerNormal, GL_FLOAT, GL_FALSE, stride, (void*)(sizeof(float) * floatsPerVertex));
 	glEnableVertexAttribArray(1);
-	glVertexAttribPointer(2, floatsPerUV, GL_FLOAT, GL_FALSE, stride, (void*)(sizeof(float) * (floatsPerVertex + floatsPerNormal)));
+	glVertexAttribPointer(2, floatsPerTexture, GL_FLOAT, GL_FALSE, stride, (void*)(sizeof(float) * (floatsPerVertex + floatsPerNormal)));
 	glEnableVertexAttribArray(2);
 }
 

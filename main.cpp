@@ -31,9 +31,9 @@ namespace
     // Stores the GL data relative to a given mesh
     struct GLMesh
     {
-        GLuint vao;         // Handle for the vertex array object
-        GLuint vbos[2];     // Handles for the vertex buffer objects
-        GLuint nIndices;    // Number of indices of the mesh
+        GLuint vao[5];         // Handle for the vertex array object
+        GLuint vbos[5];     // Handles for the vertex buffer objects
+        GLuint nIndices[5];    // Number of indices of the mesh
     };
 
     // Main GLFW window
@@ -42,6 +42,7 @@ namespace
     GLMesh gMesh;
     // Texture ID
     GLuint textureMonitorId;
+    GLint gTexWrapMode = GL_REPEAT;
     // Shader programs
     GLuint gProgramId;
     GLuint textureProgramId;
@@ -131,9 +132,15 @@ const GLchar* textureVertexShaderSource = GLSL(440,
 
     out vec2 vertexTextureCoordinate;
 
+
+    //Global variables for the transform matrices
+    uniform mat4 model;
+    uniform mat4 view;
+    uniform mat4 projection;
+
 void main()
 {
-    gl_Position = vec4(position.x, position.y, position.z, 1.0);
+    gl_Position = projection * view * model * vec4(position, 1.0f); // transforms vertices to clip coordinates
     vertexTextureCoordinate = textureCoordinate;
 }
 );
@@ -144,11 +151,11 @@ const GLchar* textureFragmentShaderSource = GLSL(440,
 
     out vec4 fragmentColor;
 
-    uniform sampler2D uTextureBase;
+    uniform sampler2D uTexture;
 
 void main()
 {
-    fragmentColor = texture(uTextureBase, vertexTextureCoordinate);
+    fragmentColor = texture(uTexture, vertexTextureCoordinate); // Sends texture to the GPU for rendering
 }
 );
 
@@ -455,30 +462,38 @@ void URender()
     glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
 
     // Activate the VBOs contained within the mesh's VAO
-    glBindVertexArray(gMesh.vao);
+    glBindVertexArray(gMesh.vao[0]);
 
     // Draws the triangles
-    glDrawElements(GL_TRIANGLES, (34 * 3), GL_UNSIGNED_SHORT, NULL); // Draws the triangle
+    glDrawElements(GL_TRIANGLES, gMesh.nIndices[0], GL_UNSIGNED_SHORT, NULL); // Draws the triangle
 
-    //glBindVertexArray(0);
+    //=========================================================================================
 
-    //----------------
+    // Deactivate the Vertex Array Object and shader program
+    glBindVertexArray(0);
+    glUseProgram(0);
+
+    // Set the shader to be used
     glUseProgram(textureProgramId);
 
-    // Reference matrix uniforms from the Lamp Shader program
+    // Retrieves and passes transform matrices to the Shader program
     modelLoc = glGetUniformLocation(textureProgramId, "model");
     viewLoc = glGetUniformLocation(textureProgramId, "view");
     projLoc = glGetUniformLocation(textureProgramId, "projection");
 
-    // Pass matrix data to the Lamp Shader program's matrix uniforms
     glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
     glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
     glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
 
-    // Activate the VBOs contained within the mesh's VAO
-    glBindVertexArray(gMesh.vao);
+    // bind textures on corresponding texture units
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, textureMonitorId);
 
-    glDrawElements(GL_TRIANGLES, (2 * 3), GL_UNSIGNED_SHORT, (void *)(34 * 6));
+    // Activate the VBOs contained within the mesh's VAO
+    glBindVertexArray(gMesh.vao[1]);
+
+    // Draws the triangles
+    glDrawElements(GL_TRIANGLES, gMesh.nIndices[1], GL_UNSIGNED_SHORT, NULL); // Draws the triangle
 
     // Deactivate the Vertex Array Object and shader program
     glBindVertexArray(0);
@@ -518,15 +533,15 @@ void UCreateMesh(GLMesh& mesh)
        -10.0f,  0.6f,  2.0f,  0.5859375f, 0.29296875f, 0.0f, 1.0f,  0.0, 0.0,
 
        // Monitor
-        -2.0f, -3.5f,  1.2f,  1.0f, 1.0f, 1.0f, 1.0f,               0.0, 1.0,
-        -8.0f, -3.5f,  1.2f,  1.0f, 1.0f, 1.0f, 1.0f,               1.0, 1.0,
-        -2.0f, -3.5f, -3.0f,  1.0f, 1.0f, 1.0f, 1.0f,               0.0, 0.0,
-        -8.0f, -3.5f, -3.0f,  1.0f, 1.0f, 1.0f, 1.0f,               1.0, 0.0,
+        -2.0f, -3.5f,  1.2f,  1.0f, 1.0f, 1.0f, 1.0f,               1.0, 0.0,
+        -8.0f, -3.5f,  1.2f,  1.0f, 1.0f, 1.0f, 1.0f,               0.0, 0.0,
+        -2.0f, -3.5f, -3.0f,  1.0f, 1.0f, 1.0f, 1.0f,               1.0, 1.0,
+        -8.0f, -3.5f, -3.0f,  1.0f, 1.0f, 1.0f, 1.0f,               0.0, 1.0,
 
-        -2.0f, -3.8f,  1.2f,  1.0f, 1.0f, 1.0f, 1.0f,               0.0, 1.0,
-        -8.0f, -3.8f,  1.2f,  1.0f, 1.0f, 1.0f, 1.0f,               1.0, 1.0,
+        -2.0f, -3.8f,  1.2f,  1.0f, 1.0f, 1.0f, 1.0f,               0.0, 0.0,
+        -8.0f, -3.8f,  1.2f,  1.0f, 1.0f, 1.0f, 1.0f,               0.0, 0.0,
         -2.0f, -3.8f, -3.0f,  1.0f, 1.0f, 1.0f, 1.0f,               0.0, 0.0,
-        -8.0f, -3.8f, -3.0f,  1.0f, 1.0f, 1.0f, 1.0f,               1.0, 0.0,
+        -8.0f, -3.8f, -3.0f,  1.0f, 1.0f, 1.0f, 1.0f,               0.0, 0.0,
 
     };
 
@@ -580,11 +595,14 @@ void UCreateMesh(GLMesh& mesh)
         19, 23, 17,
         17, 21, 23,
 
-        // Monitor front
+        // Monitor rear
         21, 22, 23,
         23, 24, 22,
 
-        // Monitor rear
+    };
+
+    GLfloat monitorIndices[] = {
+        // Monitor front
         17, 18, 19,
         19, 20, 18,
     };
@@ -592,22 +610,22 @@ void UCreateMesh(GLMesh& mesh)
     const GLuint floatsPerVertex = 3;
     const GLuint floatsPerColor = 4;
     const GLuint floatsPerTexture = 2;
+    // Strides between vertex coordinates is 9 (x, y, z, r, g, b, a, texture A, texture B). A tightly packed stride is 0.
+    GLint stride = sizeof(float) * (floatsPerVertex + floatsPerColor + floatsPerTexture);// The number of floats before each
 
-    mesh.nIndices = sizeof(indices) / sizeof(indices[0]);
+    mesh.nIndices[0] = sizeof(indices) / sizeof(indices[0]);
 
-    glGenVertexArrays(1, &mesh.vao); // we can also generate multiple VAOs or buffers at the same time
-    glBindVertexArray(mesh.vao);
+    glGenVertexArrays(1, &mesh.vao[0]); // we can also generate multiple VAOs or buffers at the same time
+    glBindVertexArray(mesh.vao[0]);
 
     // Create 2 buffers: first one for the vertex data; second one for the indices
-    glGenBuffers(2, mesh.vbos);
+    glGenBuffers(1, &mesh.vbos[0]);
     glBindBuffer(GL_ARRAY_BUFFER, mesh.vbos[0]); // Activates the buffer
     glBufferData(GL_ARRAY_BUFFER, sizeof(verts), verts, GL_STATIC_DRAW); // Sends vertex or coordinate data to the GPU
 
+    glGenBuffers(1, &mesh.vbos[1]);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh.vbos[1]);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
-
-    // Strides between vertex coordinates is 9 (x, y, z, r, g, b, a, texture A, texture B). A tightly packed stride is 0.
-    GLint stride = sizeof(float) * (floatsPerVertex + floatsPerColor + floatsPerTexture);// The number of floats before each
 
     // Create Vertex Attribute Pointers
     glVertexAttribPointer(0, floatsPerVertex, GL_FLOAT, GL_FALSE, stride, 0);
@@ -618,12 +636,40 @@ void UCreateMesh(GLMesh& mesh)
 
     glVertexAttribPointer(2, floatsPerTexture, GL_FLOAT, GL_FALSE, stride, (void*)(sizeof(float) * (floatsPerVertex + floatsPerColor)));
     glEnableVertexAttribArray(2);
+
+    glBindVertexArray(0);
+
+    // ====================================================================================
+
+    mesh.nIndices[1] = sizeof(monitorIndices) / sizeof(monitorIndices[0]);
+
+    glGenVertexArrays(1, &mesh.vao[1]); // we can also generate multiple VAOs or buffers at the same time
+    glBindVertexArray(mesh.vao[1]);
+
+    // Create 2 buffers: first one for the vertex data; second one for the indices
+    glGenBuffers(1, &mesh.vbos[2]);
+    glBindBuffer(GL_ARRAY_BUFFER, mesh.vbos[2]); // Activates the buffer
+    glBufferData(GL_ARRAY_BUFFER, sizeof(verts), verts, GL_STATIC_DRAW); // Sends vertex or coordinate data to the GPU
+
+    glGenBuffers(1, &mesh.vbos[3]);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh.vbos[3]);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(monitorIndices), monitorIndices, GL_STATIC_DRAW);
+
+    // Create Vertex Attribute Pointers
+    glVertexAttribPointer(0, floatsPerVertex, GL_FLOAT, GL_FALSE, stride, 0);
+    glEnableVertexAttribArray(0);
+
+    glVertexAttribPointer(1, floatsPerColor, GL_FLOAT, GL_FALSE, stride, (void*)(sizeof(float)* floatsPerVertex));
+    glEnableVertexAttribArray(1);
+
+    glVertexAttribPointer(2, floatsPerTexture, GL_FLOAT, GL_FALSE, stride, (void*)(sizeof(float)* (floatsPerVertex + floatsPerColor)));
+    glEnableVertexAttribArray(2);
 }
 
 
 void UDestroyMesh(GLMesh& mesh)
 {
-    glDeleteVertexArrays(1, &mesh.vao);
+    glDeleteVertexArrays(1, mesh.vao);
     glDeleteBuffers(2, mesh.vbos);
 }
 
